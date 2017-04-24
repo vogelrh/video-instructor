@@ -1,0 +1,507 @@
+<!--
+@license
+
+The MIT License (MIT)
+Copyright (c) 2017 Robert Vogel
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+<link rel="import" href="../polymer/polymer.html">
+<link rel="import" href="../paper-styles/typography.html">
+<link rel="import" href="../paper-item/paper-item.html">
+<link rel="import" href="../paper-item/paper-item-body.html">
+<link rel="import" href="../paper-item/paper-icon-item.html">
+<link rel="import" href="../paper-slider/paper-slider.html">
+<link rel="import" href="../iron-icons/iron-icons.html">
+<link rel="import" href="../iron-icons/av-icons.html">
+<link rel="import" href="../iron-icons/device-icons.html">
+<link rel="import" href="../paper-icon-button/paper-icon-button.html">
+
+<!-- 
+  `video-instructor` Provides detailed control and access to a video file. @demo demo/index.html 
+  TODO - complete documentation. Add more mix-ins? Should icon be added to expand video to size of viewport?
+  -->
+<dom-module id="video-instructor">
+  <template>
+    <style>
+       :host {
+        display: block;
+        --paper-item-min-height: 35px;
+        --video-height: var(--video-instructor-video-height, 0px);
+        --video-width: var(--video-instructor-video-width, 0px);
+        --container-height: calc(var(--video-height) + 35px);
+        --container-width: calc(var(--video-width) + 250px);
+      }
+
+      .container {
+        display: -ms-flexbox;
+        display: -webkit-flex;
+        display: flex;
+        padding: 0px;
+        height: var(--container-height);
+        width: var(--container-width);
+      }
+
+      .avatar {
+        display: -ms-flexbox;
+        display: -webkit-flex;
+        display: flex;
+        box-sizing: border-box;
+        width: 35px;
+        height: 35px;
+        border-top-left-radius: 30%;
+        border-bottom-left-radius: 30%;
+        background: var(--paper-amber-500);
+        justify-content: center;
+        align-items: center;
+        margin-left: -15px;
+      }
+
+      .blue {
+        background-color: var(--paper-light-blue-300);
+      }
+
+      .grey {
+        background-color: var(--paper-grey-300);
+      }
+
+      .lbTitle {
+        @apply --paper-font-title;
+        height: 35px;
+        background-color: var(--paper-grey-600);
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .lBox {
+        height: 100%;
+        /*border: 3px solid darkgray;*/
+        width: 250px;
+      }
+
+      .listItems {
+        box-sizing: content-box;
+        height: calc(var(--container-height) - 35px);
+        ;
+        overflow-y: scroll;
+      }
+
+      .vBox {
+        height: 100%;
+      }
+
+      .vdTitle {
+        @apply --paper-font-body1;
+        height: 35px;
+        background-color: var(--paper-grey-800);
+        color: white;
+        display: flex;
+        justify-content: left;
+        padding-left: 00px;
+        align-items: center;
+      }
+
+      .hms {
+        margin-left: -5px;
+        font-weight: thin;
+      }
+
+      .videoBlock {
+        display: inline-block;
+      }
+
+      .videoSlider {
+        width: 55%;
+      }
+
+      .volumeSlider {
+        width: 15%;
+      }
+    </style>
+    <div class="container">
+      <div class="lBox" hidden$="[[!_hasMenu]]">
+        <div class="lbTitle">Content</div>
+        <div id="listItems" class="listItems" role="listbox" }>
+          <template id="chapters" is="dom-repeat" items="{{_chapters}}">
+            <paper-item id="chi_[[index]]">
+              <!--ToDo: simplify on-tap logic can we capture event from lower element here-->
+              <div id="tab_[[index]]" class$="avatar {{_tabColor(index)}}" on-tap="_goToChapter">[[item.chapterNumber]]</div>
+              <paper-item-body id="ch_[[index]]">
+                <div secondary on-tap="_goToChapter">[[item.title]]</div>
+              </paper-item-body>
+            </paper-item>
+          </template>
+        </div>
+      </div>
+      <div class="vBox">
+        <div class="vdTitle">
+          <paper-icon-button id="playBtn" icon="av:play-arrow" on-tap="_togglePlay"></paper-icon-button>
+          <div class="hms"> [[_toHMS(videoTime)]] / [[_toHMS(duration)]] </div>
+          <paper-slider id="vidSlider" class="videoSlider" value={{videoTime}} max="{{duration}}"></paper-slider>
+          <paper-icon-button id="volumeBtn" icon="av:volume-up" on-tap="_toggleMute"></paper-icon-button>
+          <paper-slider id="volSlider" class="volumeSlider" value={{volume}} max="100"></paper-slider>
+          <paper-icon-button id="speedBtn" icon="device:signal-cellular-0-bar" on-tap="_toggleSpeed"></paper-icon-button>
+        </div>
+        <div class="videoBlock">
+          <video id="vTag" src=[[source]] width="[[videoWidth]]">Video not supported</video>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    class MyElement extends Polymer.Element {
+
+      constructor() {
+        super();
+      }
+
+      static get is() {
+        return 'video-instructor';
+      }
+
+      static get properties() {
+        return {
+          /**
+           * The video source file to display.
+           */
+          source: {
+            type: String,
+            value: ''
+          },
+          /**
+           * The width that the video should be displayed at. If not specified, then 
+           * the width is determined by the width of the source video. The height is 
+           * determined by the video's aspect ratio.
+           */
+          videoWidth: {
+            type: Number,
+            value: '0',
+            observer: '_videoWidthChanged',
+            notify: true
+          },
+          /**
+           * Sets or gets the current chapter that the video is at.
+           */
+          currentChapter: {
+            type: Number,
+            value: 0,
+            notify: true
+          },
+          /**
+           * Sets or gets the current time in seconds that the video is positioned 
+           * or playing at.
+           */
+          videoTime: {
+            type: Number,
+            value: 0,
+            observer: '_videoTimeValueChanged'
+          },
+          /**
+           * Sets or gets the current volume (in percent 0 - 100).
+           */
+          volume: {
+            type: Number,
+            value: 50
+          },
+          /**
+           * Gets the duration of the loaded video in seconds.
+           */
+          duration: {
+            type: Number,
+            value: 0,
+            readOnly: true,
+            notify: true
+          },
+          /**
+           * Gets a boolean that is true if the video is playing
+           */
+          isPlaying: {
+            type: Boolean,
+            value: false,
+            readOnly: true
+          },
+          /**
+           * A private property that contains the chapter information associated
+           * with the video. Use the API method `loadChapters` to populate the
+           * chapter content.
+           */
+          _chapters: {
+            type: Array,
+            value: () => [],
+            notify: true
+          },
+          /**
+           * A private property used in the internal logic of the component.
+           */
+          _ignoreChange: {
+            type: Boolean,
+            value: false,
+            readOnly: true
+          },
+          /**
+           * A private property used in the internal logic of the component.
+           */
+         _lastTime: {
+            type: Number,
+            value: 0,
+            readOnly: true
+          },
+          /**
+           *  private property used in the internal logic of the component.
+           */
+          _hasMenu: {
+            type: Boolean,
+            value: false,
+            readOnly: true
+          }
+        };
+      }
+
+      connectedCallback() {
+        super.connectedCallback();
+        this.$.vTag.addEventListener("timeupdate", () => { // time changed event handler
+          let ctime = this.$.vTag.currentTime
+          let seconds = Math.round(ctime);
+
+          this._updateTab(ctime);
+          if (seconds !== this._lastTime) {
+            this._set_lastTime(seconds);
+            this._set_ignoreChange(true);
+            this.videoTime = seconds;
+          }
+          console.log(`Time: ${ctime}`);
+        });
+
+        //load video event handler
+        this.$.vTag.addEventListener("loadeddata", () => { 
+          this._setDuration(this.$.vTag.duration);
+          this.videoTime = 0;
+          this.$.vTag.volume = this.volume / 100.;
+          this._videoWidthChanged();
+          console.log(`Video loaded, duration: ${this.$.vTag.duration}`)
+        });
+
+        this.$.vidSlider.addEventListener('immediate-value-change', () => {
+          this.$.vTag.currentTime = this.$.vidSlider.immediateValue;
+        });
+
+        this.$.volSlider.addEventListener('immediate-value-change', () => {
+          this.$.vTag.volume = this.$.volSlider.immediateValue / 100.;
+        });
+
+        this.$.volSlider.addEventListener('change', () => {
+          this.$.vTag.volume = this.$.volSlider.immediateValue / 100.;
+        });
+
+        this._videoWidthChanged(); //Initialize width of everything
+      }
+
+      /**
+       *
+       * @param chapterContent - An array containing chapter objects. Each chapter
+       * object contains the following properties:
+       *  `title` - a chapter title
+       *  `time` - the time in seconds within the video where the chapter starts
+       * @param offset - optional chapter count offset. If not provided, the chapters
+       * are numbered starting at 1.
+       */
+      loadChapters(chapterContent, chapterStart) {
+        if (Array.isArray(chapterContent)) {
+          let ix = chapterStart || 1;
+          this._chapters = [];
+          chapterContent.forEach((item) => {
+            let chapter = {
+              title: item.title,
+              time: item.time || 0,
+              chapterNumber: ix
+            }
+            this._chapters.push(chapter);
+            ix++;
+          });
+          this._set_hasMenu(true);
+        }
+      }
+      /**
+       * On-tap event handler that selects the specific chapter in the video.
+       * The chapter is determined by parsing the numeric portion of the id of
+       * the element that was tapped. 
+       * @param e - the event object from the on-tap event.
+       * @private
+       */
+       _goToChapter(e) {
+        try {
+          let ctix = parseInt(e.srcElement.parentElement.id.split('_')[1]);
+          this.currentChapter = ctix;
+          this.$.vTag.currentTime = this._chapters[ctix].time;
+          this._tabColor(ctix);
+          console.log(`Chapter ID: ${e.srcElement.id}`);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+      
+      /**
+       * Toggles video play on and off and modifies icon
+       *
+       * @private
+       */
+     _togglePlay() {
+        if (this.$.vTag.paused) {
+          this.$.vTag.play();
+          this.$.playBtn.icon = "av:pause";
+          this.isPlaying = true;
+        } else {
+          this.$.vTag.pause();
+          this.$.playBtn.icon = "av:play-arrow";
+          this.$.isPlaying = false;
+        }
+      }
+
+      /**
+       * Toggles volume mute on and off and modifies icon
+       *
+       * @private
+       */
+     _toggleMute() {
+        if (this.$.vTag.muted) {
+          this.$.vTag.muted = false;
+          this.$.volumeBtn.icon = "av:volume-up";
+        } else {
+          this.$.vTag.muted = true;
+          this.$.volumeBtn.icon = "av:volume-off";
+        }
+      }
+
+      /**
+       * Toggles between three video playback speeds;
+       * 1x, 1.3x and 1.6x
+       *
+       * @private
+       */
+      __toggleSpeed() {
+        if (this.$.vTag.playbackRate === 1.0) {
+          this.$.vTag.playbackRate = 1.3;
+          this.$.speedBtn.icon = "device:signal-cellular-2-bar";
+        } else if (this.$.vTag.playbackRate === 1.3) {
+          this.$.vTag.playbackRate = 1.6;
+          this.$.speedBtn.icon = "device:signal-cellular-4-bar";
+        } else {
+          this.$.vTag.playbackRate = 1.0;
+          this.$.speedBtn.icon = "device:signal-cellular-0-bar";
+        }
+      }
+
+      /**
+       * Observer for the videoTime property change. This value is 
+       * updated by the natural progression of the video play or by
+       * the movement of the video position slider. Natural progression
+       * changes are ignored.
+       *
+       * @private
+       */
+      _videoTimeValueChanged() {
+        if (this._lastTime && !this._ignoreChange) {
+          this.$.vTag.currentTime = this.videoTime;
+        } else {
+          this._set_ignoreChange(false);
+        }
+      }
+
+      /**
+       * Updates the current tab based on the video time. If the current tab is
+       * outside of the scroll area, it will bring it back into view.
+       *
+       * @private
+       */
+      _updateTab(ctime) {
+        let ix = 0;
+        let tabsInBox = Math.floor(this.$.listItems.clientHeight / 35);
+
+        this._chapters.forEach((ch) => {
+          let tstart = this._chapters[ix].time;
+          let tend = (ix === this._chapters.length - 1) ? this.duration : this._chapters[ix + 1].time;
+          let tab = this.shadowRoot.getElementById(`tab_${ix}`);
+          tab.classList.remove('grey');
+          tab.classList.remove('blue');
+          if (ctime >= tstart && ctime < tend) {
+            tab.classList.add('blue');
+            if ((ix + 1) >= tabsInBox) tab.scrollIntoView();
+          } else {
+            tab.classList.add('grey');
+          }
+          ix++;
+        });
+      }
+
+      /**
+       * Observer responding to changes in videoWIdth property.
+       * If the value is 0 (not set externally) then the value is
+       * set to the width of the loaded video.
+       * The method updates the `--video-width` and `--video-height` 
+       * custom CSS properties.
+       *
+       * @private
+       */
+      _videoWidthChanged() {
+        if (this.videoWidth > 0) {
+          this.$.vTag.width = this.videoWidth;
+          this.updateStyles({
+            '--video-width': this.videoWidth + "px"
+          });
+          let vHeight = this.$.vTag.clientHeight > this.$.vTag.videoHeight ? this.$.vTag.clientHeight : this.$.vTag
+            .videoHeight;
+          this.updateStyles({
+            '--video-height': vHeight + "px"
+          });
+          console.log(`_videoWidthChanged: ${this.videoWidth}`)
+        } else {
+          this.videoWidth = this.$.vTag.videoWidth;
+          console.log(`_videoWidthChanged: Width set to video width of ${this.videoWidth}`);
+        }
+      }
+
+      /** 
+       * Method called when chapter list-box is built.
+       *
+       * @private
+       */
+      _tabColor(index) {
+        let tstart = this._chapters[index].time;
+        let tend = (index === this._chapters.length - 1) ? this.duration : this._chapters[index + 1].time;
+        if (this.videoTime >= tstart && this.videoTime < tend) {
+          return 'blue';
+        } else {
+          return 'grey';
+        }
+      }
+
+      /** 
+       * Converts seconds to a string in HH:MM:SS format.
+       *
+       * @private
+       */
+      _toHMS(seconds) {
+        let h = Math.floor(seconds / 3600);
+        let m = Math.floor(seconds % 3600 / 60);
+        let s = Math.floor(seconds % 3600 % 60);
+        let hstr = (h === 0 ? '' : `00${h}`.slice(-2) + ':');
+        return hstr + `00${m}`.slice(-2) + ":" + `00${s}`.slice(-2);
+      }
+    }
+
+    window.customElements.define(MyElement.is, MyElement);
+  </script>
+</dom-module>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, minimum-scale=1, initial-scale=1, user-scalable=yes">
+
+  <title>video-instructor demo</title>
+
+  <script src="../../webcomponentsjs/webcomponents-lite.js"></script>
+
+  <link rel="import" href="../../iron-demo-helpers/demo-pages-shared-styles.html">
+  <link rel="import" href="../../iron-demo-helpers/demo-snippet.html">
+  <link rel="import" href="../video-instructor.html">
+
+  <style is="custom-style" include="demo-pages-shared-styles">
+    body {
+      background-color: lightgrey;
+    }
+
+     :host {
+      --demo-snippet: {
+        max-width: 80vw;
+        padding: 0px;
+        background-color: lightgray;
+      }
+      ;
+    }
+  </style>
+</head>
+
+<body>
+  <div>
+    <h3>Basic video-instructor demo</h3>
+    <demo-snippet>
+      <template>
+        <video-instructor id="instructor" source="./content/tcpt2e.mp4"></video-instructor>
+      </template>
+    </demo-snippet>
+  </div>
+  <script>
+    let menu = [{
+                  title: 'Start Carry Tiger',
+                  time: 0
+                },
+                {
+                  title: 'Rollback',
+                  time: 30
+                },
+                {
+                  title: 'Grasp Birds tail',
+                  time: 37
+                },
+                {
+                  title: 'Roll-back, Press & Push',
+                  time: 46
+                },
+                {
+                  title: 'Single Wip',
+                  time: 72
+                },
+                {
+                  title: 'Transistion',
+                  time: 96
+                },
+                {
+                  title: 'Whip to Fist Under Elbow',
+                  time: 113
+                },
+                {
+                  title: 'Repulse Monkey',
+                  time: 119
+                },
+                {
+                  title: 'Transition',
+                  time: 178
+                },
+                {
+                  title: 'Slant Hands Flying',
+                  time: 183.5
+                },
+                {
+                  title: 'Lifting Hands',
+                  time: 195.6
+                },
+                {
+                  title: 'White Crane Spreads Wings',
+                  time: 210
+                },
+                {
+                  title: 'Brush Knee Left',
+                  time: 226.5
+                },
+                {
+                  title: 'Pick Up Needle',
+                  time: 240.5
+                },
+                {
+                  title: 'Transition',
+                  time: 263.3
+                },
+                {
+                  title: 'Fan through the back',
+                  time: 270.4
+                },
+                {
+                  title: 'Turn & Chop with Fist',
+                  time: 283.7
+                }
+              ];
+
+    window.addEventListener('WebComponentsReady', (e) => {
+      let vidInstructor = document.getElementById("instructor");
+      vidInstructor.loadChapters(menu, 21);
+      console.log('Chapters loaded');
+    })
+  
+  
+  </script>
+</body>
+
+</html>
