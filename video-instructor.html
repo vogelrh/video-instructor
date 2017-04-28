@@ -336,6 +336,8 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
           )
         });
 
+        this.$.vTag.addEventListener('click', () => {this._togglePlay();}); //allow click on video to toggle play
+
         this.$.vidSlider.addEventListener('immediate-value-change', () => {
           this.$.vTag.currentTime = this.$.vidSlider.immediateValue;
         });
