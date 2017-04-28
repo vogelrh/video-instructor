@@ -29,7 +29,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 <!-- 
   `video-instructor` Provides detailed control and access to a video file. @demo demo/index.html 
-  TODO - complete documentation. Add more mix-ins? Should icon be added to expand video to size of viewport?
+  TODO - complete documentation. Add more mix-ins? Implement iron-resize behavior.
   -->
 <dom-module id="video-instructor">
   <template>
@@ -153,6 +153,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
           <paper-icon-button id="volumeBtn" icon="av:volume-up" on-tap="_toggleMute"></paper-icon-button>
           <paper-slider id="volSlider" class="volumeSlider" value={{volume}} max="100"></paper-slider>
           <paper-icon-button id="speedBtn" icon="device:signal-cellular-0-bar" on-tap="_toggleSpeed"></paper-icon-button>
+          <paper-icon-button id="sizeBtn" icon="icons:flip-to-back" on-tap="_toggleSize"></paper-icon-button>
         </div>
         <div class="videoBlock">
           <video id="vTag" src=[[source]] width="[[videoWidth]]">Video not supported</video>
@@ -184,7 +185,8 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
           /**
            * The width that the video should be displayed at. If not specified, then 
            * the width is determined by the width of the source video. The height is 
-           * determined by the video's aspect ratio.
+           * determined by the video's aspect ratio. If the viewport is smaller than 
+           * the intrinsic video dimensions then the video will be adjusted to fit.
            */
           videoWidth: {
             type: Number,
@@ -252,17 +254,42 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
             readOnly: true
           },
           /**
-           * A private property used in the internal logic of the component.
+           * A private read-only property used in the internal logic of the component.
            */
-         _lastTime: {
+          _lastTime: {
             type: Number,
             value: 0,
             readOnly: true
           },
           /**
-           *  private property used in the internal logic of the component.
+           *  A private read-only property used in the internal logic of the component.
            */
           _hasMenu: {
+            type: Boolean,
+            value: false,
+            readOnly: true
+          },
+          /**
+           *  A private read-only property containing the intrinsic video width in pixels.
+           */
+          _intrinsicVideoWidth: {
+            type: Number,
+            value: 0,
+            readOnly: true
+          },
+          /**
+           *  A private read-only property containing the intrinsic video height in pixels.
+           */
+         _intrinsicVideoHeight: {
+            type: Number,
+            value: 0,
+            readOnly: true
+          },
+          /**
+           *  A private read-only property set to true if the intrinsic video dimensions are 
+           *  smaller than the viewport.
+           */
+          _canExpand: {
             type: Boolean,
             value: false,
             readOnly: true
@@ -270,6 +297,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
         };
       }
 
+      /**
+       * Element initialization, set up various event listeners
+       */
       connectedCallback() {
         super.connectedCallback();
         this.$.vTag.addEventListener("timeupdate", () => { // time changed event handler
@@ -285,13 +315,25 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
           console.log(`Time: ${ctime}`);
         });
 
-        //load video event handler
-        this.$.vTag.addEventListener("loadeddata", () => { 
+        // grab the intrinsic video dimensions before it is changed
+        // and update some properties when video is loaded
+        this.$.vTag.addEventListener('loadedmetadata', () => {
+          this._set_intrinsicVideoWidth(this.$.vTag.videoWidth);
+          this._set_intrinsicVideoHeight(this.$.vTag.videoHeight);
           this._setDuration(this.$.vTag.duration);
           this.videoTime = 0;
           this.$.vTag.volume = this.volume / 100.;
-          this._videoWidthChanged();
-          console.log(`Video loaded, duration: ${this.$.vTag.duration}`)
+          if (!this._canExpandVideo()) {
+            this._adjustToFit();
+            this.$.sizeBtn.icon = "";
+          } else {
+            this.$.sizeBtn.icon = "icons:flip-to-back"
+            this._videoWidthChanged();
+          }
+
+          console.log(
+            `Loaded Video dimensions - Width: ${this._intrinsicVideoWidth} Height: ${this._intrinsicVideoHeight} Duration: ${this.duration}`
+          )
         });
 
         this.$.vidSlider.addEventListener('immediate-value-change', () => {
@@ -331,7 +373,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
             this._chapters.push(chapter);
             ix++;
           });
-          this._set_hasMenu(true);
+          this._set_hasMenu(chapterContent.length > 0);
+        } else {
+          this._set_hasMenu(false);
         }
       }
       /**
@@ -341,7 +385,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
        * @param e - the event object from the on-tap event.
        * @private
        */
-       _goToChapter(e) {
+      _goToChapter(e) {
         try {
           let ctix = parseInt(e.srcElement.parentElement.id.split('_')[1]);
           this.currentChapter = ctix;
@@ -352,13 +396,13 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
           console.error(err);
         }
       }
-      
+
       /**
        * Toggles video play on and off and modifies icon
        *
        * @private
        */
-     _togglePlay() {
+      _togglePlay() {
         if (this.$.vTag.paused) {
           this.$.vTag.play();
           this.$.playBtn.icon = "av:pause";
@@ -375,7 +419,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
        *
        * @private
        */
-     _toggleMute() {
+      _toggleMute() {
         if (this.$.vTag.muted) {
           this.$.vTag.muted = false;
           this.$.volumeBtn.icon = "av:volume-up";
@@ -404,6 +448,82 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
         }
       }
 
+      /**
+       * Toggle between the default video size and the
+       * maximum size possible. Ignore button if we can't resize.
+       *
+       * @private
+       */
+      _toggleSize() {
+        if (this._canExpandVideo()) {
+          if (this.videoWidth === this._intrinsicVideoWidth) {
+            this._adjustToFit();
+            this.$.sizeBtn.icon = "icons:flip-to-front"
+          } else {
+            this.videoWidth = this._intrinsicVideoWidth;
+            this.$.sizeBtn.icon = "icons:flip-to-back";
+          }
+        }
+      }
+
+      /**
+       * Expand/contract video to fit in the viewport. Calculates the constraining
+       * dimension either window width or height.
+       *
+       * @private
+       */
+      _adjustToFit() {
+        let d = this._getDimensions();
+        let newWidth = 0;
+        let newHeight = 0;
+
+        // Determine the largest width/height we can make the video
+        if (d.vpRatio > 1.0) { // constraining factor is height
+          newWidth = d.maxHeight * d.vRatio;
+          if (newWidth > d.maxWidth) {
+            newWidth = d.maxWidth; // can't be greater than available width.
+          }
+        } else { // constraining factor is width
+          newWidth = d.maxWidth;
+          newHeight = newWidth / d.vRatio;
+        }
+        this.videoWidth = newWidth;
+      }
+
+      /**
+       * Calculates the constraining dimensions for the video 
+       * based on window width and height.
+       *
+       * @private
+       */
+      _getDimensions() {
+        let pad = 10;
+        let lbx = this._hasMenu ? 250 : 0;
+        let me = this.getBoundingClientRect();
+        let vph = window.innerHeight;
+        let vpw = window.innerWidth;
+        let maxHeight = vph - me.top - 35 - pad; //control bar height and padding
+        let maxWidth = vpw - lbx - pad; // Content menu width and padding
+        let vpRatio = maxWidth / maxHeight;
+        let vRatio = this._intrinsicVideoWidth / this._intrinsicVideoHeight;
+        return {
+          maxHeight: maxHeight,
+          maxWidth: maxWidth,
+          vpRatio: vpRatio,
+          vRatio: vRatio
+        }
+      }
+
+      /**
+       * Checks to see if the intrinsic video size is smaller than the
+       * available space based on the viewport and the controls and menu.
+       *
+       * @private
+       */
+      _canExpandVideo() {
+        let d = this._getDimensions();
+        return this._intrinsicVideoWidth < d.maxWidth && this._intrinsicVideoHeight < d.maxHeight;
+      }
       /**
        * Observer for the videoTime property change. This value is 
        * updated by the natural progression of the video play or by
@@ -468,8 +588,10 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
           });
           console.log(`_videoWidthChanged: ${this.videoWidth}`)
         } else {
-          this.videoWidth = this.$.vTag.videoWidth;
-          console.log(`_videoWidthChanged: Width set to video width of ${this.videoWidth}`);
+          if (this.$.vTag && this.$.vTag.videoWidth > 0) { // ignore if no video
+            this.videoWidth = this.$.vTag.videoWidth;
+            console.log(`_videoWidthChanged: Width set to video width of ${this.videoWidth}`);
+          }
         }
       }
 
