@@ -176,7 +176,8 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
       static get properties() {
         return {
           /**
-           * The video source file to display.
+           * The video source file to display. Use the loadChapters API call
+           * to load the chapter information to associate with the video.
            */
           source: {
             type: String,
@@ -195,12 +196,13 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
             notify: true
           },
           /**
-           * Sets or gets the current chapter that the video is at.
+           * If true then a selected video will be opened at the maximum screen size 
+           * possible. If false then the video will be opened at it's intrinsic size
+           * or smaller if it will not fit.
            */
-          currentChapter: {
-            type: Number,
-            value: 0,
-            notify: true
+          maximize: {
+            type: Boolean,
+            value: false
           },
           /**
            * Sets or gets the current time in seconds that the video is positioned 
@@ -327,8 +329,12 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
             this._adjustToFit();
             this.$.sizeBtn.icon = "";
           } else {
+            if (this.maximize) {
+              this._adjustToFit();
+            } else {
             this.$.sizeBtn.icon = "icons:flip-to-back"
-            this._videoWidthChanged();
+            this.videoWidth = this.intrinsicVideoWidth;
+            }
           }
 
           console.log(
@@ -390,7 +396,6 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
       _goToChapter(e) {
         try {
           let ctix = parseInt(e.srcElement.parentElement.id.split('_')[1]);
-          this.currentChapter = ctix;
           this.$.vTag.currentTime = this._chapters[ctix].time;
           this._tabColor(ctix);
           console.log(`Chapter ID: ${e.srcElement.id}`);
@@ -583,8 +588,10 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
           this.updateStyles({
             '--video-width': this.videoWidth + "px"
           });
-          let vHeight = this.$.vTag.clientHeight > this.$.vTag.videoHeight ? this.$.vTag.clientHeight : this.$.vTag
-            .videoHeight;
+
+        let vHeight = this.$.vTag.clientHeight; //Height of menu adjusts to video container height
+
+        console.log(`VHeight: ${vHeight} VCHeight: ${this.$.vTag.clientHeight} VideoHeight: ${this.$.vTag.videoHeight}`);
           this.updateStyles({
             '--video-height': vHeight + "px"
           });
